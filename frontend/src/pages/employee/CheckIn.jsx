@@ -80,18 +80,10 @@ const CheckIn = () => {
         setCustomer(data.profiles)
         setVehicleType(data.vehicle_type)
         
-        // AUTO-DETECT: Check for any reservation for this customer
-        const { data: reservation } = await supabase
-          .from('parking_slots')
-          .select('*')
-          .eq('customer_id', data.profiles.id)
-          .eq('status', 'reserved')
-          .single()
-        
-        if (reservation) {
-          setSelectedArea(reservation.area_id)
-          setSelectedSlot(reservation.id)
-          showToast(`Phát hiện đặt chỗ tại ${reservation.slot_number}`, 'success')
+        // Auto-detect profile but skip reservation checks
+        if (data) {
+          setCustomer(data.profiles)
+          setVehicleType(data.vehicle_type)
         }
       } else {
         setCustomer(null)
@@ -237,21 +229,18 @@ const CheckIn = () => {
                 <label className="block text-sm font-bold text-slate-700 ml-1">Chọn vị trí (Slot)</label>
                 <div className="grid grid-cols-5 gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100 max-h-[200px] overflow-y-auto">
                   {slots.map((slot) => {
-                    const isReservedForThisCustomer = customer && slot.customer_id === customer.id && slot.status === 'reserved'
                     return (
                       <button
                         key={slot.id}
                         type="button"
-                        disabled={slot.status !== 'available' && !isReservedForThisCustomer}
+                        disabled={slot.status !== 'available'}
                         onClick={() => setSelectedSlot(slot.id)}
                         className={`aspect-square rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
                           selectedSlot === slot.id 
                             ? 'border-primary-600 bg-primary-600 text-white shadow-md' 
-                            : isReservedForThisCustomer
-                              ? 'border-amber-400 bg-amber-50 text-amber-600 animate-pulse'
-                              : slot.status !== 'available'
-                                ? 'bg-slate-200 border-slate-200 text-slate-400 cursor-not-allowed'
-                                : 'bg-white border-white text-slate-400 hover:border-primary-200 hover:text-primary-600'
+                            : slot.status !== 'available'
+                              ? 'bg-slate-200 border-slate-200 text-slate-400 cursor-not-allowed'
+                              : 'bg-white border-white text-slate-400 hover:border-primary-200 hover:text-primary-600'
                         }`}
                       >
                         <span className="text-[9px] font-black">{slot.slot_number.split('-')[1]}</span>
@@ -262,7 +251,6 @@ const CheckIn = () => {
                 <div className="flex gap-4 text-[10px] font-bold text-slate-400 justify-center">
                   <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-white border border-slate-200"></div>Trống</div>
                   <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-200"></div>Đỗ</div>
-                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-400"></div>Đã đặt</div>
                 </div>
               </div>
             </div>

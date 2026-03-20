@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Car, Bike, History, Wallet, CheckCircle2, AlertCircle, ArrowRight, Loader2, User, MapPin } from 'lucide-react'
+import { Car, Bike, History, Wallet, CheckCircle2, AlertCircle, ArrowRight, Loader2, User, CreditCard, AlertTriangle, Sparkles, MapPin, Clock } from 'lucide-react'
 import { useSupabase } from '../../hooks/useSupabase'
 import { useAuth } from '../../hooks/useAuth'
+import { supabase } from '../../utils/supabaseClient'
 import { PARKING_STATUS } from '../../utils/constants'
 import { formatCurrency, formatDate } from '../../utils/helpers'
 
@@ -10,35 +11,33 @@ const CustomerHome = () => {
   const [activeSessions, setActiveSessions] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [invoices, setInvoices] = useState([])
-  const [areas, setAreas] = useState([])
-  const [selectedArea, setSelectedArea] = useState(null)
-  const [slots, setSlots] = useState([])
+  const [monthlyCards, setMonthlyCards] = useState([])
   
   const { profile } = useAuth()
   const { query, loading } = useSupabase()
 
   useEffect(() => {
     fetchCustomerData()
-    fetchAreasAndSlots()
   }, [])
 
   const fetchCustomerData = async () => {
-    // Fetch active parking sessions linking by customer_id
-    const { data: sessions } = await query((s) => 
-      s.from('parking_records')
-        .select('*, area:parking_areas(code), slot:parking_slots(slot_number)')
-        .eq('customer_id', profile?.id)
-        .eq('status', PARKING_STATUS.IN)
-    )
-    if (sessions) setActiveSessions(sessions)
-
-    // Fetch registered vehicles
+    // 1. Fetch products (vehicles) to get all license plates
     const { data: v } = await query((s) => 
       s.from('vehicles').select('*').eq('customer_id', profile?.id)
     )
     if (v) setVehicles(v)
+    const plateList = v ? v.map(veh => veh.license_plate) : []
 
-    // Fetch unpaid invoices
+    // 2. Fetch active parking sessions (by ID or Plate)
+    const { data: sessions } = await query((s) => 
+      s.from('parking_records')
+        .select('*, area:parking_areas(code), slot:parking_slots(slot_number)')
+        .eq('status', PARKING_STATUS.IN)
+        .or(`customer_id.eq.${profile?.id}${plateList.length > 0 ? `,license_plate.in.(${plateList.join(',')})` : ''}`)
+    )
+    if (sessions) setActiveSessions(sessions)
+
+    // 3. Fetch unpaid invoices
     const { data: inv } = await query((s) => 
       s.from('invoices')
       .select('*, record:parking_records!inner(*)')
@@ -46,52 +45,21 @@ const CustomerHome = () => {
       .eq('payment_status', 'pending')
     )
     if (inv) setInvoices(inv)
+
+    // 4. Fetch active monthly cards
+    const { data: cards } = await supabase
+      .from('monthly_cards')
+      .select('*')
+      .eq('customer_id', profile?.id)
+      .eq('status', 'active')
+      .gte('end_date', new Date().toISOString().split('T')[0])
+    if (cards) setMonthlyCards(cards)
   }
 
-  const fetchAreasAndSlots = async () => {
-    const { data: a } = await query((s) => s.from('parking_areas').select('*').order('code'))
-    if (a) {
-      setAreas(a)
-      if (a.length > 0) setSelectedArea(a[0].id)
-    }
-  }
-
-  useEffect(() => {
-    if (selectedArea) {
-      fetchSlots(selectedArea)
-    }
-  }, [selectedArea])
-
-  const fetchSlots = async (areaId) => {
-    const { data } = await query((s) => 
-      s.from('parking_slots')
-        .select('*')
-        .eq('area_id', areaId)
-        .order('slot_number')
-    )
-    if (data) setSlots(data)
-  }
-
-  const handleReserveSlot = async (slot) => {
-    if (slot.status !== 'available') return
-
-    const { error } = await query((s) => 
-      s.from('parking_slots')
-        .update({ status: 'reserved', customer_id: profile?.id })
-        .eq('id', slot.id),
-      'Đã đặt chỗ thành công! Vui lòng di chuyển đến bãi xe.'
-    )
-    if (!error) fetchSlots(selectedArea)
-  }
-
-  const handleCancelReservation = async (slotId) => {
-    const { error } = await query((s) => 
-      s.from('parking_slots')
-        .update({ status: 'available', customer_id: null })
-        .eq('id', slotId),
-      'Đã hủy đặt chỗ'
-    )
-    if (!error) fetchSlots(selectedArea)
+  const getDaysRemaining = (endDate) => {
+    const end = new Date(endDate)
+    const now = new Date()
+    return Math.ceil((end - now) / (1000 * 60 * 60 * 24))
   }
 
   return (
@@ -118,18 +86,32 @@ const CustomerHome = () => {
             {activeSessions.length > 0 ? (
               <div className="space-y-4">
                 {activeSessions.map((session) => (
-                  <div key={session.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-primary-500/20 rounded-xl text-primary-400">
-                        {session.vehicle_type === 'car' ? <Car /> : <Bike />}
+                  <div key={session.id} className="flex items-center justify-between p-5 bg-white/5 rounded-[1.5rem] border border-white/10 hover:bg-white/10 transition-all group">
+                    <div className="flex items-center gap-6">
+                      <div className="w-14 h-14 flex items-center justify-center bg-primary-500/20 rounded-2xl text-primary-400 group-hover:scale-110 transition-transform">
+                        {session.vehicle_type === 'car' ? <Car className="w-8 h-8" /> : <Bike className="w-8 h-8" />}
                       </div>
                       <div>
-                        <p className="font-black text-xl italic">{session.license_plate}</p>
-                        <p className="text-xs text-slate-400">Khu vực: {session.area?.code} • Vào lúc: {formatDate(session.entry_time).split(' ')[1]}</p>
+                        <div className="flex items-center gap-3">
+                          <p className="font-black text-2xl tracking-tight italic">{session.license_plate}</p>
+                          <span className="px-2 py-0.5 rounded-lg bg-primary-600 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary-900/50">
+                            Đang đỗ
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                            <MapPin className="w-3 h-3 text-red-400" />
+                            Vị trí: <span className="text-white ml-1 bg-white/10 px-2 py-0.5 rounded-md border border-white/5">Khu {session.area?.code} - {session.slot?.slot_number}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                            <Clock className="w-3 h-3 text-blue-400" />
+                            Vào: <span className="text-white ml-1">{formatDate(session.entry_time).split(' ')[1]}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <Link to="/customer/history" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all">
-                      <ArrowRight className="w-5 h-5" />
+                    <Link to="/customer/history" className="p-3 bg-white/10 rounded-2xl hover:bg-primary-600 transition-all shadow-xl">
+                      <ArrowRight className="w-6 h-6" />
                     </Link>
                   </div>
                 ))}
@@ -140,7 +122,6 @@ const CustomerHome = () => {
               </div>
             )}
           </div>
-          {/* Abstract background blobs */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary-600/20 rounded-full blur-3xl -mr-32 -mt-32"></div>
         </div>
 
@@ -168,95 +149,67 @@ const CustomerHome = () => {
               <span className="text-4xl font-black text-slate-900">{invoices.length}</span>
               <Link to="/customer/invoices" className="text-primary-600 text-sm font-bold hover:underline">Xem tất cả</Link>
             </div>
-            <div className="mt-4 p-3 bg-amber-50 rounded-xl flex items-center gap-2 text-xs font-bold text-amber-700">
-              <AlertCircle className="w-4 h-4" />
-              Tính năng thanh toán trực tuyến sắp ra mắt
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Slot Selection Grid */}
-      <div className="space-y-6">
+      {/* Monthly Card Status */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-primary-600" />
-            Vị trí đỗ xe & Đặt chỗ trước
+            <CreditCard className="w-5 h-5 text-primary-600" />
+            Thẻ tháng
           </h3>
-          <div className="flex gap-2">
-            {areas.map(area => (
-              <button
-                key={area.id}
-                onClick={() => setSelectedArea(area.id)}
-                className={`px-4 py-2 rounded-xl border-2 font-bold text-sm transition-all ${
-                  selectedArea === area.id 
-                    ? 'border-primary-600 bg-primary-50 text-primary-700' 
-                    : 'border-slate-100 bg-white text-slate-400'
-                }`}
-              >
-                {area.code}
-              </button>
-            ))}
-          </div>
+          <Link to="/customer/monthly-card" className="text-primary-600 text-sm font-bold hover:underline">Quản lý thẻ</Link>
         </div>
 
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden min-h-[300px] flex flex-col items-center justify-center">
-          {loading && slots.length === 0 ? (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-              <p className="text-sm text-slate-400 font-medium">Đang tải sơ đồ bãi xe...</p>
-            </div>
-          ) : areas.length === 0 ? (
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto text-slate-300">
-                <MapPin className="w-8 h-8" />
-              </div>
-              <p className="text-slate-500 font-medium">Hiện tại không có khu vực nào khả dụng.</p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-5 sm:grid-cols-10 gap-3 w-full">
-                {slots.map(slot => {
-                  const isMine = slot.customer_id === profile?.id
-                  const statusColors = {
-                    available: 'bg-slate-50 border-slate-100 text-slate-400 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-600',
-                    occupied: 'bg-primary-600 border-primary-600 text-white cursor-not-allowed opacity-80',
-                    reserved: isMine 
-                      ? 'bg-amber-500 border-amber-500 text-white animate-pulse' 
-                      : 'bg-slate-200 border-slate-200 text-slate-400 cursor-not-allowed'
-                  }
-
-                  return (
-                    <button
-                      key={slot.id}
-                      disabled={(slot.status !== 'available' && !isMine) || loading}
-                      onClick={() => isMine ? handleCancelReservation(slot.id) : handleReserveSlot(slot)}
-                      className={`relative aspect-square rounded-xl border-2 flex flex-col items-center justify-center transition-all ${statusColors[slot.status]}`}
-                    >
-                      <span className="text-[10px] font-bold opacity-60">S-</span>
-                      <span className="text-sm font-black">{slot.slot_number.split('-')[1]}</span>
-                      {isMine && slot.status === 'reserved' && (
-                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></div>
+        {monthlyCards.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {monthlyCards.map(card => {
+              const daysLeft = getDaysRemaining(card.end_date)
+              const isNearExpiry = daysLeft <= 7
+              return (
+                <Link to="/customer/monthly-card" key={card.id} className="block">
+                  <div className={`p-5 rounded-2xl border-2 transition-all hover:shadow-md ${
+                    isNearExpiry ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'
+                  }`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        {card.vehicle_type === 'car' ? <Car className="w-5 h-5 text-blue-600" /> : <Bike className="w-5 h-5 text-emerald-600" />}
+                        <span className="font-black text-lg italic text-slate-900">{card.license_plate}</span>
+                      </div>
+                      {isNearExpiry ? (
+                        <span className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">
+                          <AlertTriangle className="w-3 h-3" /> Sắp hết hạn
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
+                          <CheckCircle2 className="w-3 h-3" /> Hoạt động
+                        </span>
                       )}
-                    </button>
-                  )
-                })}
-              </div>
-              
-              <div className="mt-8 flex justify-center gap-6 text-xs font-bold uppercase tracking-widest text-slate-400">
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-slate-50 border-2 border-slate-100"></div> TRỐNG
-                </div>
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-primary-600"></div> ĐÃ ĐỖ
-                </div>
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-amber-500"></div> BẠN ĐẶT
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Hết hạn: {new Date(card.end_date).toLocaleDateString('vi-VN')} • Còn {daysLeft} ngày
+                    </p>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="bg-gradient-to-r from-primary-50 to-blue-50 p-6 rounded-2xl border border-primary-100 flex items-center justify-between">
+            <div>
+              <h4 className="font-bold text-primary-900">Chưa có thẻ tháng</h4>
+              <p className="text-sm text-primary-700 mt-1">Đăng ký thẻ tháng để gửi xe không cần thanh toán mỗi lần!</p>
+            </div>
+            <Link to="/customer/monthly-card">
+              <button className="px-4 py-2 bg-primary-600 text-white rounded-xl font-bold text-sm hover:bg-primary-700 transition-colors flex items-center gap-2 shadow-lg shadow-primary-200">
+                <Sparkles className="w-4 h-4" />
+                Đăng ký
+              </button>
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Benefits Section */}
@@ -273,7 +226,7 @@ const CustomerHome = () => {
               <Wallet className="w-6 h-6" />
             </div>
             <h4 className="font-bold text-emerald-900">Tiết kiệm chi phí</h4>
-            <p className="text-sm text-emerald-700">Giá ưu đãi dành riêng cho khách hàng đăng ký thành viên chính thức.</p>
+            <p className="text-sm text-emerald-700">Đăng ký thẻ tháng để gửi xe không giới hạn, tiết kiệm hơn.</p>
          </div>
          <div className="p-6 bg-purple-50 rounded-3xl space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-purple-600 flex items-center justify-center text-white">

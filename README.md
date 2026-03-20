@@ -1,6 +1,9 @@
 # Hệ thống Quản lý Bãi Giữ xe Thông minh (Smart Parking)
 
-Chào mừng bạn đến với hệ thống quản lý bãi giữ xe hiện đại, được xây dựng với mục tiêu tối ưu hóa vận hành, tính minh bạch và trải nghiệm người dùng cao cấp.
+[![Deploy with Vercel](https://vercel.com/button)](https://nguyendotrungluongedu.id.vn)
+
+## 🌐 Demo Website
+Truy cập bản demo trực tuyến tại: **[https://nguyendotrungluongedu.id.vn](https://nguyendotrungluongedu.id.vn)**
 
 ## 🚀 Công nghệ sử dụng
 - **Frontend**: React (Vite), Tailwind CSS, Lucide Icons, Recharts (Biểu đồ).
@@ -47,4 +50,4 @@ Sau khi chạy `schema.sql`, bạn có thể tạo tài khoản qua trang Đăng
 - `frontend/src/utils/`: Cấu hình Supabase client và hàm helper.
 
 ---
-Phát triển bởi **Antigravity AI Team**.
+WEBSITE DEMO PTTKHT NHÓM 1

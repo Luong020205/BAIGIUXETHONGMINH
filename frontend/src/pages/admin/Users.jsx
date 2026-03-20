@@ -4,6 +4,7 @@ import { Button } from '../../components/common/Button'
 import { Input } from '../../components/common/Input'
 import { Modal } from '../../components/common/Modal'
 import { useSupabase } from '../../hooks/useSupabase'
+import { supabase } from '../../utils/supabaseClient'
 import { ROLES } from '../../utils/constants'
 import { useToast } from '../../context/ToastContext'
 
@@ -12,11 +13,12 @@ const UsersPage = () => {
   const [activeTab, setActiveTab] = useState(ROLES.EMPLOYEE)
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
     fullName: '',
     phone: '',
-    password: 'password123' // default password for new staff
+    password: 'password123'
   })
 
   const { query, loading } = useSupabase()
@@ -33,9 +35,36 @@ const UsersPage = () => {
 
   const handleCreateStaff = async (e) => {
     e.preventDefault()
-    showToast('Chức năng tạo tài khoản Staff yêu cầu Supabase Admin API. Vui lòng tạo tài khoản qua Supabase Dashboard.', 'info')
-    // In a real production app with a backend, we would call an edge function here
-    setIsModalOpen(false)
+    if (!formData.email || !formData.fullName) {
+      showToast('Vui lòng điền đầy đủ thông tin', 'error')
+      return
+    }
+
+    setCreating(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('create-employee', {
+        body: {
+          email: formData.email,
+          password: formData.password,
+          fullName: formData.fullName,
+          phone: formData.phone
+        }
+      })
+
+      if (error) {
+        console.error('Edge Function Error:', error)
+        throw new Error(error.message || 'Không thể tạo tài khoản nhân viên')
+      }
+
+      showToast('Tạo tài khoản nhân viên thành công!', 'success')
+      setIsModalOpen(false)
+      setFormData({ email: '', fullName: '', phone: '', password: 'password123' })
+      fetchUsers()
+    } catch (error) {
+      showToast(error.message, 'error')
+    } finally {
+      setCreating(false)
+    }
   }
 
   const filteredUsers = profiles.filter(user => 
@@ -200,7 +229,7 @@ const UsersPage = () => {
             <Button type="button" variant="secondary" className="flex-1" onClick={() => setIsModalOpen(false)}>
               Hủy
             </Button>
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="flex-1" loading={creating}>
               Xác nhận thêm
             </Button>
           </div>

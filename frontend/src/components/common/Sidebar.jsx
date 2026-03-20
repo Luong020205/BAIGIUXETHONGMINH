@@ -43,6 +43,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
   const customerLinks = [
     { to: '/customer', icon: Home, label: 'Trang chủ' },
     { to: '/customer/vehicles', icon: Car, label: 'Xe của tôi' },
+    { to: '/customer/monthly-card', icon: ListOrdered, label: 'Thẻ tháng' },
     { to: '/customer/history', icon: History, label: 'Lịch sử gửi xe' },
     { to: '/customer/invoices', icon: Receipt, label: 'Hóa đơn' },
   ]

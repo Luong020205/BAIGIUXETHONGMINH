@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, Search, Clock, CreditCard, Banknote, Loader2, ArrowRight, Car, Bike, Receipt, Scan, CheckCircle2 } from 'lucide-react'
+import { LogOut, Search, Clock, CreditCard, Banknote, Loader2, ArrowRight, Car, Bike, Receipt, Scan, CheckCircle2, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../utils/supabaseClient'
 import { useSupabase } from '../../hooks/useSupabase'
 import { useAuth } from '../../hooks/useAuth'
@@ -22,6 +22,8 @@ const CheckOut = () => {
   const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isPaying, setIsPaying] = useState(false)
+  const [hasMonthlyCard, setHasMonthlyCard] = useState(false)
+  const [monthlyCardInfo, setMonthlyCardInfo] = useState(null)
 
   const { profile } = useAuth()
   const { query, loading } = useSupabase()
@@ -40,11 +42,10 @@ const CheckOut = () => {
   // Real-time update for fee calculation
   useEffect(() => {
     let timer;
-    if (record) {
+    if (record && !hasMonthlyCard) {
       const updateFee = () => {
         const vehiclePricing = pricing.find(p => p.vehicle_type === record.vehicle_type)
         const details = calculateParkingFee(record.entry_time, vehiclePricing?.hourly_rate || 0)
-        // Map helpers.js keys (hours, amount) to local keys (durationHours, totalFee)
         setFeeDetails({
           durationHours: details.chargedHours,
           displayDuration: `${details.hours} giờ ${details.minutes} phút`,
@@ -52,19 +53,30 @@ const CheckOut = () => {
         })
       }
       
-      updateFee() // Immediate calculation
-      timer = setInterval(updateFee, 10000) // Update every 10 seconds
+      updateFee()
+      timer = setInterval(updateFee, 10000)
+    } else if (record && hasMonthlyCard) {
+      const vehiclePricing = pricing.find(p => p.vehicle_type === record.vehicle_type)
+      const details = calculateParkingFee(record.entry_time, vehiclePricing?.hourly_rate || 0)
+      setFeeDetails({
+        durationHours: details.chargedHours,
+        displayDuration: `${details.hours} giờ ${details.minutes} phút`,
+        totalFee: 0
+      })
     } else {
       setFeeDetails(null)
     }
     return () => clearInterval(timer)
-  }, [record, pricing])
+  }, [record, pricing, hasMonthlyCard])
 
   const handleSearch = async (e) => {
     e.preventDefault()
     if (!searchTerm) return
 
     setCalculating(true)
+    setHasMonthlyCard(false)
+    setMonthlyCardInfo(null)
+
     const { data, error } = await supabase
       .from('parking_records')
       .select('*, area:parking_areas(code), slot:parking_slots(slot_number)')
@@ -77,12 +89,35 @@ const CheckOut = () => {
       setRecord(null)
     } else {
       setRecord(data)
+      
+      // Check for active monthly card for this license plate
+      const today = new Date().toISOString().split('T')[0]
+      const { data: cardData } = await supabase
+        .from('monthly_cards')
+        .select('*')
+        .eq('license_plate', searchTerm.toUpperCase())
+        .eq('status', 'active')
+        .gte('end_date', today)
+        .single()
+      
+      if (cardData) {
+        setHasMonthlyCard(true)
+        setMonthlyCardInfo(cardData)
+      }
     }
     setCalculating(false)
   }
 
   const handleProcessCheckout = async () => {
-    if (!record || !feeDetails) return
+    if (!record) return
+
+    // If monthly card, skip payment completely
+    if (hasMonthlyCard) {
+      await finalizeCheckoutMonthlyCard()
+      return
+    }
+
+    if (!feeDetails) return
 
     if (paymentMethod === PAYMENT_METHODS.ONLINE) {
       setIsPaymentModalOpen(true)
@@ -90,6 +125,48 @@ const CheckOut = () => {
     }
 
     await finalizeCheckout()
+  }
+
+  const finalizeCheckoutMonthlyCard = async () => {
+    setCalculating(true)
+    
+    // Create invoice with amount 0, marked as monthly card
+    const { error: invoiceError } = await query((s) => 
+      s.from('invoices').insert([{
+        record_id: record.id,
+        amount: 0,
+        payment_method: 'card',
+        payment_status: 'paid',
+        paid_at: new Date().toISOString()
+      }])
+    )
+
+    if (invoiceError) { setCalculating(false); return }
+
+    // Release the slot
+    if (record.slot_id) {
+      await query((s) => 
+        s.from('parking_slots')
+          .update({ status: 'available', customer_id: null })
+          .eq('id', record.slot_id)
+      )
+    }
+
+    // Mark record as OUT
+    const { error: recordError } = await query((s) => 
+      s.from('parking_records')
+        .update({ 
+          status: PARKING_STATUS.OUT, 
+          exit_time: new Date().toISOString() 
+        })
+        .eq('id', record.id),
+      'Trả xe thành công! (Miễn phí - Thẻ tháng)'
+    )
+
+    setCalculating(false)
+    if (!recordError) {
+      navigate('/employee')
+    }
   }
 
   const finalizeCheckout = async () => {
@@ -113,7 +190,7 @@ const CheckOut = () => {
         s.from('parking_slots')
           .update({ 
             status: 'available',
-            customer_id: null // Clear any reservation
+            customer_id: null
           })
           .eq('id', record.slot_id)
       )
@@ -202,13 +279,42 @@ const CheckOut = () => {
                   </span>
                 </div>
               </div>
+
+              {/* Monthly Card Badge */}
+              {hasMonthlyCard && (
+                <div className="flex items-center gap-2 p-3 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30 text-xs font-bold uppercase animate-pulse">
+                  <ShieldCheck className="w-4 h-4" />
+                  Thẻ tháng - Miễn phí thanh toán
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Payment Section */}
         <div className="lg:col-span-2">
-          {record && feeDetails ? (
+          {record && hasMonthlyCard ? (
+            // Monthly Card - Free checkout
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-emerald-200 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex flex-col items-center justify-center py-8 bg-emerald-50 rounded-3xl border border-dashed border-emerald-200">
+                <ShieldCheck className="w-16 h-16 text-emerald-600 mb-4" />
+                <p className="text-emerald-600 font-bold uppercase tracking-widest text-xs mb-2">THẺ THÁNG HOẠT ĐỘNG</p>
+                <h1 className="text-4xl font-black text-emerald-600">MIỄN PHÍ</h1>
+                <p className="text-sm text-slate-500 mt-2">
+                  Thẻ hết hạn: {new Date(monthlyCardInfo?.end_date).toLocaleDateString('vi-VN')}
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex gap-4">
+                <Button variant="secondary" className="flex-1 py-4 text-lg font-bold" onClick={() => setRecord(null)}>
+                  Hủy
+                </Button>
+                <Button className="flex-[2] py-4 text-lg font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700" onClick={handleProcessCheckout} loading={calculating} icon={ArrowRight}>
+                  Xác nhận trả xe
+                </Button>
+              </div>
+            </div>
+          ) : record && feeDetails ? (
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex flex-col items-center justify-center py-8 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
                 <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">Tổng số tiền cần thu</p>
@@ -278,7 +384,6 @@ const CheckOut = () => {
         onClose={() => setIsScannerOpen(false)}
         onScan={(plate) => {
           setSearchTerm(plate)
-          // Automatically trigger search
           handleSearch({ preventDefault: () => {} })
         }}
       />
@@ -292,7 +397,6 @@ const CheckOut = () => {
         <div className="space-y-6 text-center">
           <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200 space-y-4">
             <div className="bg-white p-4 rounded-2xl shadow-sm inline-block mx-auto border border-slate-100">
-              {/* Using a placeholder for QR code - in production, this would be a dynamic VietQR link */}
               <img 
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PARKING_${record?.id}_${feeDetails?.totalFee}`} 
                 alt="QR Code" 

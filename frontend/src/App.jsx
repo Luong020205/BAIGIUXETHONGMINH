@@ -31,6 +31,7 @@ const CustomerHome = lazy(() => import('./pages/customer/Home'))
 const MyVehicles = lazy(() => import('./pages/customer/MyVehicles'))
 const MyHistory = lazy(() => import('./pages/customer/MyHistory'))
 const Invoices = lazy(() => import('./pages/customer/Invoices'))
+const MonthlyCard = lazy(() => import('./pages/customer/MonthlyCard'))
 
 // Redirect based on role if at base "/"
 const HomeByRole = ({ user, profile, loading }) => {
@@ -160,6 +161,7 @@ function App() {
       }>
         <Route index element={<CustomerHome />} />
         <Route path="vehicles" element={<MyVehicles />} />
+        <Route path="monthly-card" element={<MonthlyCard />} />
         <Route path="history" element={<MyHistory />} />
         <Route path="invoices" element={<Invoices />} />
       </Route>
