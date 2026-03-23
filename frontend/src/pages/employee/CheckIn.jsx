@@ -179,7 +179,15 @@ const CheckIn = () => {
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => setVehicleType(VEHICLE_TYPES.CAR)}
+                  onClick={() => {
+                    setVehicleType(VEHICLE_TYPES.CAR)
+                    // Reset area if current one is incompatible
+                    const currentArea = areas.find(a => a.id === selectedArea)
+                    if (currentArea && currentArea.vehicle_type !== VEHICLE_TYPES.CAR) {
+                      setSelectedArea('')
+                      setSlots([])
+                    }
+                  }}
                   className={`flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
                     vehicleType === VEHICLE_TYPES.CAR 
                       ? 'border-primary-600 bg-primary-50 text-primary-700' 
@@ -242,7 +250,9 @@ const CheckIn = () => {
                 {/* Warning if area not compatible with vehicle type */}
                 {selectedArea && areas.find(a => a.id === selectedArea)?.vehicle_type !== vehicleType && (
                   <p className="mt-2 text-xs text-red-500 font-medium animate-pulse">
-                    Khu vực này không dành cho loại xe đang chọn!
+                    {vehicleType === VEHICLE_TYPES.CAR 
+                      ? "Khu vực này không dành cho ô tô!" 
+                      : "Khu vực này không dành cho xe máy!"}
                   </p>
                 )}
               </div>
