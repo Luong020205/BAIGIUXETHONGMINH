@@ -94,8 +94,27 @@ const CheckIn = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!licensePlate || !selectedArea || !selectedSlot) {
-      return showToast('Vui lòng nhập biển số và chọn vị trí đỗ (Slot)', 'error')
+    let slotToUse = selectedSlot
+
+    if (!licensePlate || !selectedArea) {
+      return showToast('Vui lòng nhập biển số và chọn khu vực', 'error')
+    }
+
+    // Auto-assign slot if not selected
+    if (!slotToUse) {
+      const availableSlots = slots.filter(s => s.status === 'available')
+      if (availableSlots.length === 0) {
+        return showToast('Khu vực này hiện không còn chỗ trống', 'error')
+      }
+      
+      // Sort by slot number suffix (numeric part)
+      const sortedSlots = [...availableSlots].sort((a, b) => {
+        const numA = parseInt(a.slot_number.split('-')[1]) || 0
+        const numB = parseInt(b.slot_number.split('-')[1]) || 0
+        return numA - numB
+      })
+      
+      slotToUse = sortedSlots[0].id
     }
 
     const { error } = await query((s) => 
@@ -103,7 +122,7 @@ const CheckIn = () => {
         license_plate: licensePlate,
         vehicle_type: vehicleType,
         area_id: selectedArea,
-        slot_id: selectedSlot,
+        slot_id: slotToUse,
         status: PARKING_STATUS.IN,
         customer_id: customer?.id || null,
         created_by: profile.id
@@ -226,7 +245,10 @@ const CheckIn = () => {
 
               {/* Slot Selection */}
               <div className="space-y-3">
-                <label className="block text-sm font-bold text-slate-700 ml-1">Chọn vị trí (Slot)</label>
+                <div className="flex justify-between items-center ml-1">
+                  <label className="block text-sm font-bold text-slate-700">Chọn vị trí (Slot)</label>
+                  <span className="text-[10px] text-slate-400 italic font-medium">(Bỏ trống để tự động sắp xếp)</span>
+                </div>
                 <div className="grid grid-cols-5 gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100 max-h-[200px] overflow-y-auto">
                   {slots.map((slot) => {
                     return (

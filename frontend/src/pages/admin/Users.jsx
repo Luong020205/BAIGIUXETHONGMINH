@@ -12,6 +12,7 @@ const UsersPage = () => {
   const [profiles, setProfiles] = useState([])
   const [activeTab, setActiveTab] = useState(ROLES.EMPLOYEE)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [formData, setFormData] = useState({
@@ -67,8 +68,20 @@ const UsersPage = () => {
     }
   }
 
+  const handleToggleActive = async (user) => {
+    const newStatus = !user.is_active
+    const { error } = await query((s) => 
+      s.from('profiles')
+        .update({ is_active: newStatus })
+        .eq('id', user.id),
+      `Đã ${newStatus ? 'kích hoạt lại' : 'hủy kích hoạt'} tài khoản ${user.full_name}`
+    )
+    if (!error) fetchUsers()
+  }
+
   const filteredUsers = profiles.filter(user => 
     user.role === activeTab &&
+    (showInactive || user.is_active) &&
     (user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
      user.phone?.includes(searchTerm))
   )
@@ -120,6 +133,18 @@ const UsersPage = () => {
             />
           </div>
 
+          <div className="flex items-center justify-end px-2">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={showInactive} 
+                onChange={(e) => setShowInactive(e.target.checked)}
+                className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+              />
+              Hiển thị tài khoản đã nghỉ/ngừng hoạt động
+            </label>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
@@ -127,7 +152,7 @@ const UsersPage = () => {
                   <th className="px-4 py-3">Người dùng</th>
                   <th className="px-4 py-3">Liên hệ</th>
                   <th className="px-4 py-3">Vai trò</th>
-                  <th className="px-4 py-3">Ngày tham gia</th>
+                  <th className="px-4 py-3">Trạng thái</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -170,12 +195,26 @@ const UsersPage = () => {
                           {user.role}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-sm text-slate-500">
-                        {new Date(user.created_at).toLocaleDateString('vi-VN')}
+                      <td className="px-4 py-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          user.is_active 
+                            ? 'bg-emerald-100 text-emerald-700' 
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {user.is_active ? 'Hoạt động' : 'Đã khóa'}
+                        </span>
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <button className="p-2 text-slate-400 hover:text-slate-600 rounded-lg group-hover:bg-white transition-all">
-                          <MoreVertical className="w-4 h-4" />
+                        <button 
+                          onClick={() => handleToggleActive(user)}
+                          title={user.is_active ? 'Hủy kích hoạt' : 'Kích hoạt lại'}
+                          className={`p-2 rounded-lg transition-all ${
+                            user.is_active 
+                              ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' 
+                              : 'text-emerald-600 hover:bg-emerald-50'
+                          }`}
+                        >
+                          {user.is_active ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                         </button>
                       </td>
                     </tr>

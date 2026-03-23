@@ -103,6 +103,15 @@ export const AuthProvider = ({ children }) => {
 
         if (error) throw error
         
+        if (data && data.is_active === false) {
+          console.warn('AuthContext: User is inactive. Logging out.')
+          await supabase.auth.signOut()
+          setProfile(null)
+          setUser(null)
+          setLoading(false)
+          return
+        }
+
         profileRef.current = data
         setProfile(data)
         setLoading(false)
