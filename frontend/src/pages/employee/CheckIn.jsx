@@ -69,11 +69,15 @@ const CheckIn = () => {
 
     if (value.length >= 4) {
       setSearchingCustomer(true)
-      // Check if this plate belongs to a registered customer
+      // Check if this plate belongs to a registered ACTIVE customer
       const { data } = await supabase
         .from('vehicles')
-        .select('*, profiles(id, full_name, phone)')
+        .select(`
+          *,
+          profiles!inner(id, full_name, phone, is_active)
+        `)
         .eq('license_plate', value)
+        .eq('profiles.is_active', true)
         .single()
       
       if (data) {

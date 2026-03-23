@@ -90,13 +90,14 @@ const CheckOut = () => {
     } else {
       setRecord(data)
       
-      // Check for active monthly card for this license plate
+      // Check for active monthly card for this license plate and ACTIVE customer
       const today = new Date().toISOString().split('T')[0]
       const { data: cardData } = await supabase
         .from('monthly_cards')
-        .select('*')
+        .select('*, profiles!inner(is_active)')
         .eq('license_plate', searchTerm.toUpperCase())
         .eq('status', 'active')
+        .eq('profiles.is_active', true)
         .gte('end_date', today)
         .single()
       
