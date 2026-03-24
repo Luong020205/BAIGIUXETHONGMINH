@@ -24,6 +24,7 @@ const CheckOut = () => {
   const [isPaying, setIsPaying] = useState(false)
   const [hasMonthlyCard, setHasMonthlyCard] = useState(false)
   const [monthlyCardInfo, setMonthlyCardInfo] = useState(null)
+  const [verificationCode, setVerificationCode] = useState('')
 
   const { profile } = useAuth()
   const { query, loading } = useSupabase()
@@ -111,6 +112,17 @@ const CheckOut = () => {
 
   const handleProcessCheckout = async () => {
     if (!record) return
+
+    // Verify OTP first - ONLY if the record HAS a verification code
+    if (record.verification_code) {
+      if (!verificationCode) {
+        return showToast('Vui lòng nhập mã xác nhận (OTP)', 'error')
+      }
+
+      if (verificationCode !== record.verification_code) {
+        return showToast('Mã xác nhận không chính xác!', 'error')
+      }
+    }
 
     // If monthly card, skip payment completely
     if (hasMonthlyCard) {
@@ -288,6 +300,32 @@ const CheckOut = () => {
                   Thẻ tháng - Miễn phí thanh toán
                 </div>
               )}
+
+              {/* OTP Verification Field */}
+              <div className="pt-4 border-t border-white/10 space-y-3">
+                <label className="text-xs font-bold text-primary-400 uppercase tracking-widest flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4" />
+                  Xác nhận mã OTP
+                </label>
+                {record.verification_code ? (
+                  <>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="Nhập 6 số..."
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 text-center text-3xl font-black tracking-[0.3em] text-primary-400 focus:outline-none focus:border-primary-500 transition-all placeholder:text-white/5"
+                    />
+                    <p className="text-[10px] text-slate-500 italic text-center">Mã 6 số được cấp khi xe vào bãi</p>
+                  </>
+                ) : (
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl text-center">
+                    <p className="text-amber-500 text-xs font-bold uppercase tracking-wider">Không yêu cầu OTP</p>
+                    <p className="text-[10px] text-slate-400 mt-1 italic">Dành cho xe vào bãi trước khi có hệ thống 2 lớp</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

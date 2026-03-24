@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Car, Bike, History, Wallet, CheckCircle2, AlertCircle, ArrowRight, Loader2, User, CreditCard, AlertTriangle, Sparkles, MapPin, Clock } from 'lucide-react'
+import { Car, Bike, History, Wallet, CheckCircle2, AlertCircle, ArrowRight, Loader2, User, CreditCard, AlertTriangle, Sparkles, MapPin, Clock, ShieldCheck } from 'lucide-react'
 import { useSupabase } from '../../hooks/useSupabase'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../utils/supabaseClient'
@@ -107,6 +107,12 @@ const CustomerHome = () => {
                             <Clock className="w-3 h-3 text-blue-400" />
                             Vào: <span className="text-white ml-1">{formatDate(session.entry_time).split(' ')[1]}</span>
                           </div>
+                          {session.verification_code && (
+                            <div className="flex items-center gap-1 text-primary-400 text-xs font-bold uppercase tracking-wider">
+                              <ShieldCheck className="w-3 h-3" />
+                              Mã OTP: <span className="text-white ml-1 bg-primary-600 px-2 py-0.5 rounded-md border border-primary-500 shadow-sm shadow-primary-900/50">{session.verification_code}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

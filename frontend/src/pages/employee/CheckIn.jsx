@@ -9,6 +9,7 @@ import { Button } from '../../components/common/Button'
 import { Input } from '../../components/common/Input'
 import { useToast } from '../../context/ToastContext'
 import { Scanner } from '../../components/common/Scanner'
+import { Modal } from '../../components/common/Modal'
 
 const CheckIn = () => {
   const [licensePlate, setLicensePlate] = useState('')
@@ -20,6 +21,9 @@ const CheckIn = () => {
   const [customer, setCustomer] = useState(null)
   const [searchingCustomer, setSearchingCustomer] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [generatedCode, setGeneratedCode] = useState('')
+  const [lastRecord, setLastRecord] = useState(null)
 
   const { profile } = useAuth()
   const { query, loading } = useSupabase()
@@ -121,7 +125,10 @@ const CheckIn = () => {
       slotToUse = sortedSlots[0].id
     }
 
-    const { error } = await query((s) => 
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString()
+    setGeneratedCode(newCode)
+
+    const { data, error } = await query((s) => 
       s.from('parking_records').insert([{
         license_plate: licensePlate,
         vehicle_type: vehicleType,
@@ -129,13 +136,15 @@ const CheckIn = () => {
         slot_id: slotToUse,
         status: PARKING_STATUS.IN,
         customer_id: customer?.id || null,
-        created_by: profile.id
-      }]),
+        created_by: profile.id,
+        verification_code: newCode
+      }]).select('*, area:parking_areas(code), slot:parking_slots(slot_number)').single(),
       'Ghi nhận xe vào thành công!'
     )
 
-    if (!error) {
-      navigate('/employee')
+    if (!error && data) {
+      setLastRecord(data)
+      setShowSuccessModal(true)
     }
   }
 
@@ -356,6 +365,56 @@ const CheckIn = () => {
           handlePlateChange({ target: { value: plate } })
         }}
       />
+
+      <Modal
+        isOpen={showSuccessModal}
+        onClose={() => {
+          setShowSuccessModal(false)
+          navigate('/employee')
+        }}
+        title="GHI NHẬN THÀNH CÔNG"
+      >
+        <div className="space-y-6 text-center py-4">
+          <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+            <CheckCircle2 className="w-10 h-10" />
+          </div>
+          
+          <div className="space-y-2">
+            <h3 className="text-xl font-black text-slate-900 uppercase">Mã xác nhận lấy xe (OTP)</h3>
+            <p className="text-slate-500 text-sm">Vui lòng cung cấp mã này cho khách hàng hoặc chụp ảnh lại</p>
+          </div>
+
+          <div className="bg-slate-900 text-white p-8 rounded-[2rem] shadow-2xl relative overflow-hidden group">
+            <div className="relative z-10">
+              <span className="text-6xl font-black tracking-[0.2em] italic text-primary-400 group-hover:scale-110 transition-transform inline-block">
+                {generatedCode}
+              </span>
+            </div>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary-600/20 rounded-full blur-2xl -mr-16 -mt-16"></div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-left bg-slate-50 p-6 rounded-3xl border border-slate-100">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Biển số</p>
+              <p className="font-black text-lg italic">{lastRecord?.license_plate}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vị trí đỗ</p>
+              <p className="font-bold text-lg text-primary-600">Khu {lastRecord?.area?.code} - {lastRecord?.slot?.slot_number}</p>
+            </div>
+          </div>
+
+          <Button 
+            className="w-full py-4 text-lg font-black uppercase tracking-widest rounded-2xl" 
+            onClick={() => {
+              setShowSuccessModal(false)
+              navigate('/employee')
+            }}
+          >
+            Hoàn tất & Quay lại
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

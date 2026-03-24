@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { History, Calendar, Car, Bike, MapPin, Clock, Loader2, Filter } from 'lucide-react'
+import { History, Calendar, Car, Bike, MapPin, Clock, Loader2, Filter, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../utils/supabaseClient'
 import { formatDate } from '../../utils/helpers'
 import { useSupabase } from '../../hooks/useSupabase'
@@ -79,6 +79,12 @@ const MyHistory = () => {
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${record.status === 'in' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
                     {record.status === 'in' ? 'Đang trong bãi' : 'Đã ra'}
                   </span>
+                  {record.status === 'in' && record.verification_code && (
+                    <div className="mt-2 flex items-center gap-1.5 text-primary-600 bg-primary-50 px-2 py-1 rounded-lg border border-primary-100 w-fit">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span className="text-[10px] font-black tracking-widest uppercase">OTP: {record.verification_code}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
